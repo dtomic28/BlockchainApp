@@ -1,30 +1,30 @@
+import hashlib
+import time
 from datetime import datetime
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
 
 
 class DataBlock:
-    def __init__(self, index, diff, previous_hash="0", timestamp=None, data=""):
+    def __init__(self, index, diff, previous_hash="0"):
         self.index = index
-        self.timestamp = timestamp if timestamp else datetime.now()
-        self.data = data
+        self.timestamp = datetime.now()
+        self.data = f"Block Data {index}"
         self.previous_hash = previous_hash
         self.diff = diff
         self.nonce = 0
         self.hash = self.calculate_hash()
 
     def calculate_hash(self):
-        hasher = hashes.Hash(hashes.SHA256(), backend=default_backend())
-        hasher.update(f"{self.index}{self.timestamp}{self.data}{
-                      self.previous_hash}{self.diff}{self.nonce}".encode("utf-8"))
-        return hasher.finalize().hex()
+        sha = hashlib.sha256()
+        sha.update(f"{self.index}{self.timestamp}{self.data}{
+                   self.previous_hash}{self.diff}{self.nonce}".encode())
+        return sha.hexdigest()
 
     def increment_nonce(self):
-        """Increment nonce and recalculate hash."""
         self.nonce += 1
         self.hash = self.calculate_hash()
 
     def is_valid(self):
+        """Check if the hash meets the difficulty requirement."""
         return self.hash.startswith("0" * self.diff)
 
     def __str__(self):
