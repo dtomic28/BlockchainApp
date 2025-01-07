@@ -1,33 +1,31 @@
-import secrets
 from datetime import datetime
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 
 
 class DataBlock:
-    def __init__(self, index, diff, previous_hash="0"):
+    def __init__(self, index, diff, previous_hash="0", timestamp=None, data=""):
         self.index = index
-        self.timestamp = datetime.now()
-        self.data = secrets.token_bytes(16)
+        self.timestamp = timestamp if timestamp else datetime.now()
+        self.data = data
         self.previous_hash = previous_hash
         self.diff = diff
         self.nonce = 0
         self.hash = self.calculate_hash()
 
     def calculate_hash(self):
-        """Calculates the block hash using SHA-256 and proof-of-work"""
-        while True:
-            hasher = hashes.Hash(hashes.SHA256(), backend=default_backend())
-            hasher.update(self.get_data_string().encode("utf-8"))
-            hash_value = hasher.finalize().hex()
-            if hash_value[:self.diff] == "0" * self.diff:
-                return hash_value
-            self.nonce += 1
+        hasher = hashes.Hash(hashes.SHA256(), backend=default_backend())
+        hasher.update(f"{self.index}{self.timestamp}{self.data}{
+                      self.previous_hash}{self.diff}{self.nonce}".encode("utf-8"))
+        return hasher.finalize().hex()
 
-    def get_data_string(self):
-        """Returns the concatenated block data for hashing"""
-        return f"{self.index}{self.timestamp}{self.data.hex()}{self.previous_hash}{self.diff}{self.nonce}"
+    def increment_nonce(self):
+        """Increment nonce and recalculate hash."""
+        self.nonce += 1
+        self.hash = self.calculate_hash()
+
+    def is_valid(self):
+        return self.hash.startswith("0" * self.diff)
 
     def __str__(self):
-        """Returns a readable representation of the block"""
-        return f"Index: {self.index}, Hash: {self.hash}, PrevHash: {self.previous_hash}, Nonce: {self.nonce}, Timestamp: {self.timestamp}"
+        return f"Block {self.index} | Hash: {self.hash} | Nonce: {self.nonce} | Diff: {self.diff}"
