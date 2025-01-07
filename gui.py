@@ -14,7 +14,7 @@ class BlockchainGUI(tk.Tk):
         self.text_area.grid(row=0, column=0, columnspan=3, padx=10, pady=10)
 
         # Adding Text Tags for Formatting
-        self.text_area.tag_configure("info", foreground="blue")
+        self.text_area.tag_configure("info", foreground="white")
         self.text_area.tag_configure("success", foreground="green")
         self.text_area.tag_configure("error", foreground="red")
 

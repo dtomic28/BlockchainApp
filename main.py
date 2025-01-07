@@ -4,7 +4,7 @@ from gui import BlockchainGUI
 import queue
 
 if __name__ == "__main__":
-    blockchain = Blockchain(diff=1)
+    blockchain = Blockchain(diff=4)
     blockchain.create_genesis_block()
 
     network = BlockchainNetwork(blockchain)

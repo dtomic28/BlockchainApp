@@ -36,57 +36,133 @@ class BlockchainNetwork:
         self.mining_thread.start()
 
     def listen_for_clients(self):
-        """Continuously listen for new client connections."""
+        """Continuously listen for incoming client connections."""
         while self.running:
             try:
                 client_socket, client_address = self.server_socket.accept()
+
+                # ✅ Prevent duplicate connections by checking IP and Port
+                if client_address in self.subscribers:
+                    self.write_line(f"Duplicate connection from {
+                                    client_address}, ignoring.", "error")
+                    client_socket.close()
+                    continue
+
                 self.subscribers[client_address] = client_socket
+                self.request_chain_sync(client_socket)
+                if self.write_line:
+                    self.write_line(f"New connection from {
+                                    client_address}", "success")
 
-                # ✅ Handle incoming connection requests properly
-                data = client_socket.recv(4096)
-                packet = pickle.loads(data)
-                if packet["type"] == "CONNECT":
-                    if self.write_line:
-                        self.write_line(f"New node connected from {
-                                        client_address}", "success")
-
-                # ✅ Start listening to the connected node
                 threading.Thread(target=self.handle_client, args=(
                     client_socket,), daemon=True).start()
-
             except Exception as e:
                 if self.write_line:
                     self.write_line(
                         f"Error accepting connection: {e}", "error")
 
+    def connect_to_node(self, port):
+        """Connect to another node and ensure only one connection per node."""
+        address = ("127.0.0.1", port)
+
+        # ✅ Check for existing connection before creating a new one
+        if address in self.subscribers:
+            if self.write_line:
+                self.write_line(
+                    f"Already connected to node at port {port}", "info")
+            return False
+
+        try:
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.connect(address)
+            packet = {"type": "CONNECT", "port": port}
+            client_socket.send(pickle.dumps(packet))
+
+            # ✅ Register the new connection
+            self.subscribers[address] = client_socket
+            self.request_chain_sync(client_socket)
+
+            threading.Thread(target=self.handle_client, args=(
+                client_socket,), daemon=True).start()
+            if self.write_line:
+                self.write_line(f"Connected to node on port {port}", "success")
+            return True
+        except Exception as e:
+            if self.write_line:
+                self.write_line(f"Error connecting to node at port {
+                                port}: {e}", "error")
+            return False
+
+    def request_chain_sync(self, client_socket):
+        """Request chain synchronization from a connected node."""
+        try:
+            sync_request = {"type": "SYNC_REQUEST"}
+            client_socket.send(pickle.dumps(sync_request))
+            if self.write_line:
+                self.write_line(
+                    "Requesting chain synchronization from a peer...", "info")
+        except Exception as e:
+            self.write_line(f"Error requesting chain sync: {e}", "error")
+
+    def request_chain_sync_all(self):
+        """Request chain synchronization from all connected nodes."""
+        sync_request = {"type": "SYNC_REQUEST"}
+        self.broadcast(sync_request)
+        if self.write_line:
+            self.write_line(
+                "Requesting chain sync from all connected nodes...", "info")
+
     def handle_client(self, client_socket):
-        """Handle incoming data from connected clients."""
+        """Handle incoming messages from connected clients."""
         try:
             while self.running:
                 data = client_socket.recv(4096)
                 if data:
                     packet = pickle.loads(data)
-                    self.process_packet(packet)
+                    self.process_packet(packet, client_socket)
         except Exception as e:
-            if self.write_line:
-                self.write_line(f"Error receiving data: {e}", "error")
+            self.write_line(f"Connection error: {e}", "error")
             client_socket.close()
 
-    def process_packet(self, packet):
-        """Process incoming packets."""
+    def process_packet(self, packet, client_socket):
+        """Process incoming packets with enhanced conflict handling."""
         if packet["type"] == "BLOCK":
             new_block = packet["block"]
+
+            # ✅ Check if the received block belongs to the current chain
             if self.blockchain.add_block(new_block):
-                if self.write_line:
-                    self.write_line(
-                        f"Valid block {new_block.index} received.", "success")
+                self.write_line(
+                    f"Block {new_block.index} added successfully.", "info")
+                self.request_chain_sync_all()  # Ask for chain sync after block addition
             else:
-                if self.write_line:
-                    self.write_line(f"Invalid block {
-                                    new_block.index}.", "error")
+                # Request sync if rejected
+                self.request_chain_sync(client_socket)
+
+        elif packet["type"] == "SYNC_REQUEST":
+            # ✅ Send the entire chain to the requesting node
+            client_socket.send(pickle.dumps(
+                {"type": "CHAIN_RESPONSE", "chain": self.blockchain.chain}))
+
+        elif packet["type"] == "CHAIN_RESPONSE":
+            received_chain = packet["chain"]
+            self.synchronize_chain(received_chain)
+
+    def synchronize_chain(self, received_chain):
+        """Synchronize with the received chain using the longest chain rule and validation."""
+        # ✅ Proper conflict resolution logic added here
+        if self.blockchain.validate_chain(received_chain):
+            if len(received_chain) > len(self.blockchain.chain):
+                self.blockchain.chain = received_chain
+                self.write_line(
+                    "Chain replaced with a longer valid chain.", "success")
+            else:
+                self.write_line(
+                    "Received chain is not longer. No changes made.", "info")
+        else:
+            self.write_line("Received chain is invalid.", "error")
 
     def start_mining(self):
-        """Mining loop with messages sent to the queue."""
+        """Mining loop with proper chain comparison after every block."""
         while self.running:
             latest_block = self.blockchain.get_latest_block()
             previous_hash = latest_block.hash if latest_block else "0"
@@ -95,54 +171,23 @@ class BlockchainNetwork:
 
             while not new_block.is_valid():
                 new_block.increment_nonce()
-                """if new_block.nonce % 100000 == 0 and self.write_line:
-                    self.write_line(f"{
-                                    new_block}", "error")
-                """
+                if new_block.nonce % 500000 == 0 and self.write_line:
+                    self.write_line(f"{new_block}", "error")
+
+            # ✅ Proper conflict handling after mining
             if self.blockchain.add_block(new_block):
                 self.broadcast({"type": "BLOCK", "block": new_block})
-                if self.write_line:
-                    self.write_line(
-                        f"{new_block}", "success")
-
-    def connect_to_node(self, port):
-        """Attempt to establish a direct connection with another node."""
-        try:
-            # ✅ Create a new socket and connect to the specified port
-            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_socket.connect(("127.0.0.1", port))
-
-            # ✅ Send a connection request packet
-            packet = {"type": "CONNECT", "port": port}
-            client_socket.send(pickle.dumps(packet))
-
-            # ✅ Store the connection in the subscribers list
-            self.subscribers[(port, "127.0.0.1")] = client_socket
-
-            # ✅ Start a listener for this new connection
-            threading.Thread(target=self.handle_client, args=(
-                client_socket,), daemon=True).start()
-            if self.write_line:
-                self.write_line(f"Connected to node on port {port}", "success")
-
-            return True
-        except Exception as e:
-            if self.write_line:
-                self.write_line(f"Error connecting to node on port {
-                                port}: {e}", "error")
-            return False
+                self.request_chain_sync_all()
+                self.write_line(
+                    f"{new_block}", "success")
 
     def broadcast(self, packet):
-        """Broadcast a packet to all connected clients."""
+        """Broadcast a packet to all connected nodes."""
         for address, client_socket in list(self.subscribers.items()):
             try:
                 client_socket.send(pickle.dumps(packet))
-                if self.write_line:
-                    self.write_line(f"Broadcasting message to {
-                                    address}", "info")
             except Exception as e:
-                if self.write_line:
-                    self.write_line(f"Error sending to {
-                                    address}: {e}", "error")
+                print(f"Error broadcasting to {
+                    address}: {e}")
                 client_socket.close()
                 del self.subscribers[address]

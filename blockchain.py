@@ -36,6 +36,38 @@ class Blockchain:
             return False
         return True
 
+    def validate_chain(self, chain):
+        """Validates the entire chain's integrity."""
+        if len(chain) == 0:
+            return False
+
+        # ✅ Validate the genesis block
+        if chain[0].previous_hash != "0":
+            return False
+
+        # ✅ Validate each subsequent block
+        for i in range(1, len(chain)):
+            current_block = chain[i]
+            previous_block = chain[i - 1]
+
+            # Index check
+            if current_block.index != previous_block.index + 1:
+                return False
+
+            # Hash linkage check
+            if current_block.previous_hash != previous_block.hash:
+                return False
+
+            # Recalculate hash and compare
+            if current_block.calculate_hash() != current_block.hash:
+                return False
+
+            # Difficulty check
+            if not current_block.hash.startswith('0' * current_block.diff):
+                return False
+
+        return True
+
     def adjust_difficulty(self):
         if len(self.chain) < self.difficulty_adjustment_interval:
             return self.diff
