@@ -48,7 +48,6 @@ class BlockchainGUI(tk.Tk):
         try:
             port = int(self.port_entry.get())
             self.network.start_server(port)
-            self.write_line(f"Node started on port {port}", "info")
         except ValueError:
             self.write_line("Invalid port number.", "error")
 
