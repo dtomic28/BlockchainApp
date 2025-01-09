@@ -27,21 +27,30 @@ class Blockchain:
         return False
 
     def validate_block(self, block):
-        """Validates the integrity of a block."""
+        """Validates the integrity of a block without recalculating the hash."""
         if len(self.chain) == 0:
-            return block.previous_hash == "0" and block.calculate_hash() == block.hash
+            # Ensure the genesis block has the correct initial conditions
+            return block.previous_hash == "0" and block.hash == block.calculate_hash()
 
         last_block = self.get_latest_block()
+        # Validate without recalculating the hash
         return (
             block.previous_hash == last_block.hash
-            and block.calculate_hash() == block.hash
             and block.index == last_block.index + 1
+            and block.hash.startswith("0" * block.diff)  # Proof of work check
         )
 
     def validate_chain(self, chain):
-        """Validates the entire blockchain."""
+        """Validates the entire blockchain without recalculating each hash."""
         for i in range(1, len(chain)):
-            if not self.validate_block(chain[i]):
+            current_block = chain[i]
+            previous_block = chain[i - 1]
+
+            if (
+                current_block.previous_hash != previous_block.hash or
+                current_block.hash != current_block.calculate_hash() or
+                not current_block.hash.startswith("0" * current_block.diff)
+            ):
                 return False
         return True
 

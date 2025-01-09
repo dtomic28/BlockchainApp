@@ -39,9 +39,14 @@ class BlockchainGUI(tk.Tk):
             self, text="Connect", command=self.connect_to_node)
         self.connect_button.grid(row=2, column=2, padx=10)
 
+        # ✅ New Mining Button
+        self.mining_button = tk.Button(
+            self, text="Start Mining", command=self.network.start_mining)
+        self.mining_button.grid(row=3, column=1, pady=10)
+
         # Quit Button
         self.quit_button = tk.Button(self, text="Quit", command=self.quit)
-        self.quit_button.grid(row=3, column=1, pady=10)
+        self.quit_button.grid(row=4, column=1, pady=10)
 
     def start_node(self):
         """Start the node."""
@@ -66,7 +71,7 @@ class BlockchainGUI(tk.Tk):
             self.write_line("Invalid port number.", "error")
 
     def write_line(self, message, tag="info"):
-        """Write a message with formatting using the tuple-based approach."""
+        """Write a message with formatting."""
         self.text_area.config(state="normal")
         self.text_area.insert("end", message + "\n", tag)
         self.text_area.config(state="disabled")
